@@ -8,6 +8,9 @@ var { GraphQLScalarType, Kind } = require("graphql");
 var { LRUCache } = require("lru-cache");
 var axios = require("axios");
 var dotenv = require("dotenv");
+const bodyParser = require("body-parser");
+const cors = require("cors");
+const helmet = require("helmet");
 
 var indexRouter = require("./routes/index");
 var usersRouter = require("./routes/users");
@@ -16,6 +19,12 @@ dotenv.config();
 
 var app = express();
 
+/**
+ * middlewares for express
+ */
+app.use(helmet());
+app.use(bodyParser.json());
+app.use(cors());
 app.use(logger("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
@@ -65,18 +74,23 @@ const typeDefs = gql`
     isHidden: Int
   }
 
-	type Ticker {
-		timestamp: String!
-		price: Float!
-		volume24h: Float!
-		marketCap: Float!
-	}
+  type Ticker {
+    timestamp: String!
+    price: Float!
+    volume24h: Float!
+    marketCap: Float!
+  }
 
   type Query {
     tokens(limit: Int = 10): [Token]
     token(id: ID!): Token
     tokenInfo(ids: String!): [TokenInfo]
-    getCryptoTickers(cryptoId: String!, startDate: String!, endDate: String, limit: Int): [Ticker]
+    getCryptoTickers(
+      cryptoId: String!
+      startDate: String!
+      endDate: String
+      limit: Int
+    ): [Ticker]
   }
 `;
 
@@ -219,9 +233,12 @@ const resolvers = {
         throw new Error(`Failed to fetch token info for ids ${ids}`);
       }
     },
-    getCryptoTickers: async (_, { cryptoId, startDate, endDate, limit = 30 }) => {
+    getCryptoTickers: async (
+      _,
+      { cryptoId, startDate, endDate, limit = 30 }
+    ) => {
       const cacheKey = `tickers:${cryptoId}:${startDate}:${endDate}:${limit}`;
-      
+
       if (cache.has(cacheKey)) {
         return cache.get(cacheKey);
       }
@@ -233,21 +250,21 @@ const resolvers = {
             params: {
               start: startDate,
               end: endDate,
-              interval: '7d',
-              limit: limit
-            }
+              interval: "7d",
+              limit: limit,
+            },
           }
         );
 
         if (!response.data || response.data.length === 0) {
-          throw new Error('No data available for the specified parameters');
+          throw new Error("No data available for the specified parameters");
         }
 
-        const tickers = response.data.map(tickerData => ({
+        const tickers = response.data.map((tickerData) => ({
           timestamp: tickerData.timestamp,
           price: tickerData.price,
           volume24h: tickerData.volume_24h,
-          marketCap: tickerData.market_cap
+          marketCap: tickerData.market_cap,
         }));
 
         // Cache the result
@@ -255,10 +272,10 @@ const resolvers = {
 
         return tickers;
       } catch (error) {
-        console.error('Error fetching crypto tickers:', error);
-        throw new Error('Failed to fetch cryptocurrency ticker data');
+        console.error("Error fetching crypto tickers:", error);
+        throw new Error("Failed to fetch cryptocurrency ticker data");
       }
-    }
+    },
   },
 };
 
