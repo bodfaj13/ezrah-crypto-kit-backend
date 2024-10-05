@@ -15,12 +15,13 @@ const helmet = require("helmet");
 var indexRouter = require("./routes/index");
 var usersRouter = require("./routes/users");
 
+// Load environment variables from .env file
 dotenv.config();
 
 var app = express();
 
 /**
- * middlewares for express
+ * Middlewares setup for security, logging, parsing, etc.
  */
 app.use(helmet());
 app.use(bodyParser.json());
@@ -31,16 +32,16 @@ app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, "public")));
 
-app.use("/", indexRouter);
-app.use("/users", usersRouter);
+app.use("/", indexRouter); // Root route
+app.use("/users", usersRouter); // Users route
 
-// LFU Cache setup
+// LFU Cache setup for caching responses
 const cache = new LRUCache({
   max: 100, // Maximum number of items in cache
   maxAge: 1000 * 60 * 15, // Items expire after 15 minutes
 });
 
-// GraphQL schema
+// GraphQL schema definition
 const typeDefs = gql`
   scalar Date
 
@@ -94,32 +95,34 @@ const typeDefs = gql`
   }
 `;
 
-// Custom scalar for Date
+// Custom scalar for handling Date type in GraphQL
 const dateScalar = new GraphQLScalarType({
   name: "Date",
   description: "Date custom scalar type",
   serialize(value) {
+    // Convert outgoing Date to timestamp
     return value.getTime();
   },
   parseValue(value) {
+    // Convert incoming timestamp to Date
     return new Date(value);
   },
   parseLiteral(ast) {
     if (ast.kind === Kind.INT) {
-      return new Date(parseInt(ast.value, 10));
+      return new Date(parseInt(ast.value, 10)); // Parse Date from integer
     }
     return null;
   },
 });
 
-// Resolver functions
+// GraphQL resolvers
 const resolvers = {
   Date: dateScalar,
   Query: {
     tokens: async (_, { limit }) => {
-      const cacheKey = `tokens:${limit}`;
+      const cacheKey = `tokens:${limit}`; // Cache key for token query
       if (cache.has(cacheKey)) {
-        return cache.get(cacheKey);
+        return cache.get(cacheKey); // Return from cache if available
       }
 
       try {
@@ -146,7 +149,7 @@ const resolvers = {
           lastUpdated: new Date(token.last_updated),
         }));
 
-        cache.set(cacheKey, tokens);
+        cache.set(cacheKey, tokens); // Cache the result
         return tokens;
       } catch (error) {
         console.error("Error fetching tokens:", error);
@@ -154,9 +157,9 @@ const resolvers = {
       }
     },
     token: async (_, { id }) => {
-      const cacheKey = `token:${id}`;
+      const cacheKey = `token:${id}`; // Cache key for single token query
       if (cache.has(cacheKey)) {
-        return cache.get(cacheKey);
+        return cache.get(cacheKey); // Return from cache if available
       }
 
       try {
@@ -183,7 +186,7 @@ const resolvers = {
           lastUpdated: new Date(tokenData.last_updated),
         };
 
-        cache.set(cacheKey, token);
+        cache.set(cacheKey, token); // Cache the result
         return token;
       } catch (error) {
         console.error(`Error fetching token ${id}:`, error);
@@ -191,9 +194,9 @@ const resolvers = {
       }
     },
     tokenInfo: async (_, { ids }) => {
-      const cacheKey = `tokenInfo:${ids}`;
+      const cacheKey = `tokenInfo:${ids}`; // Cache key for token info query
       if (cache.has(cacheKey)) {
-        return cache.get(cacheKey);
+        return cache.get(cacheKey); // Return from cache if available
       }
 
       try {
@@ -226,7 +229,7 @@ const resolvers = {
           })
         );
 
-        cache.set(cacheKey, tokenInfoArray);
+        cache.set(cacheKey, tokenInfoArray); // Cache the result
         return tokenInfoArray;
       } catch (error) {
         console.error(`Error fetching token info for ids ${ids}:`, error);
@@ -237,10 +240,10 @@ const resolvers = {
       _,
       { cryptoId, startDate, endDate, limit = 30 }
     ) => {
-      const cacheKey = `tickers:${cryptoId}:${startDate}:${endDate}:${limit}`;
+      const cacheKey = `tickers:${cryptoId}:${startDate}:${endDate}:${limit}`; // Cache key for ticker query
 
       if (cache.has(cacheKey)) {
-        return cache.get(cacheKey);
+        return cache.get(cacheKey); // Return from cache if available
       }
 
       try {
@@ -267,9 +270,7 @@ const resolvers = {
           marketCap: tickerData.market_cap,
         }));
 
-        // Cache the result
-        cache.set(cacheKey, tickers);
-
+        cache.set(cacheKey, tickers); // Cache the result
         return tickers;
       } catch (error) {
         console.error("Error fetching crypto tickers:", error);
@@ -279,23 +280,24 @@ const resolvers = {
   },
 };
 
+// Start the Apollo Server
 async function startApolloServer() {
   const server = new ApolloServer({
     typeDefs,
     resolvers,
     context: ({ req }) => {
-      // You can add authentication logic here if needed
+      // Context for request, add authentication logic if needed
       return { user: req.user };
     },
   });
 
   await server.start();
 
-  server.applyMiddleware({ app });
+  server.applyMiddleware({ app }); // Apply the middleware to the express app
 }
 
 startApolloServer().catch((error) => {
   console.error("Failed to start Apollo Server:", error);
 });
 
-module.exports = app;
+module.exports = app; // Export the express app
